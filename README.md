@@ -1,308 +1,65 @@
-# PocketBase MCP Server
+# PocketBase MCP server
 
-A very much in progress MCP server based off of the Dynamics one that I have been testing and refining. That provides sophisticated tools for interacting with PocketBase databases. This server enables advanced database operations, schema management, and data manipulation through the Model Context Protocol (MCP).
+A modular TypeScript MCP server using stdio and the official PocketBase SDK. Tested against PocketBase **0.40.5**. Requires Node.js 22.12 or newer. The rewrite was based on a local snapshot of 65 official documentation pages. Generate a current snapshot with `python3 scripts/dump-docs.py`; the generated `docs/pocketbase/` directory is ignored by Git. See the [official documentation](https://pocketbase.io/docs/).
 
-Here is a video of me using it: https://www.youtube.com/watch?v=ZuTIO3I7rTM&t=345s
+## Run
 
-## Why This And Not DynamicsEndpoints?
+```sh
+npm ci
+npm run build
+cp .env.example .env
+# Fill in your instance URL and optional superuser credentials.
+npm start
+```
 
-This has actually been tested on the latest version. Currently 26.1 of PocketBase and is built off of the type definitions in the JS-SDK and not the arbitrary and wrong definitions found in the Dynamics one. Many of the methods don't even work.
-
-## Setup MCP Server Locally (Only Way Supported for Now)
-
-To set up the MCP server locally, you'll need to configure it within your `cline_mcp_settings.json` or whatever you use (claude, cursor, the config looks identical you just need to find where it is stored) file. Here's how:
-
-1.  **Locate your `cline_mcp_settings.json` file:** This file is usually located in your Cursor user settings directory. For example:
-    `/Users/yourusername/Library/Application Support/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json`
-
-2.  **Configure the server:** Add a new entry to the `mcpServers` object in your `cline_mcp_settings.json` file. The key should be a unique name for your server (e.g., "pocketbase-server"), and the value should be an object containing the server's configuration.
-
-    ```json
-    {
-      "mcpServers": {
-        "pocketbase-server": {
-          "command": "node",
-          "args": ["build/index.js"],
-          "env": {
-            "POCKETBASE_URL": "http://127.0.0.1:8090",
-            "POCKETBASE_ADMIN_EMAIL": "admin@example.com",
-            "POCKETBASE_ADMIN_PASSWORD": "admin_password"
-          },
-          "disabled": false,
-          "autoApprove": ["create_record", "create_collection"]
-        }
-      }
-    }
-    ```
-
-    - **`command`**: The command to start the server (usually `node`).
-    - **`args`**: An array of arguments to pass to the command. This should point to the compiled JavaScript file of your MCP server (e.g., `build/index.js`). Make sure the path is correct.
-    - **`env`**: An object containing environment variables.
-      - **`POCKETBASE_URL`**: The URL of your PocketBase instance. This is _required_.
-      - **`POCKETBASE_ADMIN_EMAIL`**: The admin email for your PocketBase instance (optional, but needed for some operations).
-      - **`POCKETBASE_ADMIN_PASSWORD`**: The admin password for your PocketBase instance (optional, but needed for some operations).
-    - **`disabled`**: Whether to disable to server on startup.
-    - **`autoApprove`**: list of tools to auto approve.
-    - Adjust the values in the `env` object to match your PocketBase instance's settings.
-
-- Setup in vscode is similar , find or create `.vscode/mcp.json` and add
+The CLI reads `.env` from its working directory; existing environment variables take precedence. Keep credentials out of source control. Configure your MCP client:
 
 ```json
 {
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "pocketbase-admin-email",
-      "description": "PocketBase Admin Email",
-      "password": false
-    },
-    {
-      "type": "promptString",
-      "id": "pocketbase-admin-password",
-      "description": "PocketBase Admin Password",
-      "password": true
-    }
-  ],
-  "servers": {
-    "pocketbaseServer": {
-      "type": "stdio",
+  "mcpServers": {
+    "pocketbase": {
       "command": "node",
-      // replace this with the path to your compiled MCP server (git clone the repo and run `npm run build` to compile)
-      "args": ["~/Desktop/code/mcp/pocketbase-mcp/build/index.js"],
+      "args": ["/absolute/path/pocketbase-mcp/build/index.js"],
       "env": {
         "POCKETBASE_URL": "http://127.0.0.1:8090",
-        "POCKETBASE_ADMIN_EMAIL": "${input:pocketbase-admin-email}",
-        "POCKETBASE_ADMIN_PASSWORD": "${input:pocketbase-admin-password}"
+        "POCKETBASE_ADMIN_EMAIL": "YOUR_SUPERUSER_EMAIL",
+        "POCKETBASE_ADMIN_PASSWORD": "YOUR_SUPERUSER_PASSWORD"
       }
     }
   }
 }
 ```
 
-1.  **Start the server:** After configuring the `cline_mcp_settings.json` file, you can start using the MCP server with the configured tools.
-
-## Setup MCP Server with Docker
-
-You can run the PocketBase MCP server using Docker. A `Dockerfile` is included in the repository.
-
-### Building the Docker Image
-
-```bash
-# Build the Docker image
-docker build -t pocketbase-mcp .
-```
-
-### Running the Docker Container
-
-```bash
-# Run the container with environment variables
-docker run -d \
-  --name pocketbase-mcp \
-  -e POCKETBASE_URL=http://127.0.0.1:8090 \
-  -e POCKETBASE_ADMIN_EMAIL=your_admin@example.com \
-  -e POCKETBASE_ADMIN_PASSWORD=your_admin_password \
-  pocketbase-mcp
-```
-
-### Docker MCP Configuration
-
-To use the Dockerized MCP server with your AI assistant (Cursor, Claude, etc.), configure it in your MCP settings:
-
-**For Cline/Cursor (`cline_mcp_settings.json`):**
-
-```json
-{
-  "mcpServers": {
-    "pocketbase-docker": {
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "POCKETBASE_URL=http://host.docker.internal:8090",
-        "-e",
-        "POCKETBASE_ADMIN_EMAIL=your_admin@example.com",
-        "-e",
-        "POCKETBASE_ADMIN_PASSWORD=your_admin_password",
-        "pocketbase-mcp"
-      ],
-      "disabled": false,
-      "autoApprove": ["list_collections", "list_records", "get_collection"]
-    }
-  }
-}
-```
-
-**For VS Code (`.vscode/mcp.json`):**
-
-```json
-{
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "pocketbase-admin-email",
-      "description": "PocketBase Admin Email",
-      "password": false
-    },
-    {
-      "type": "promptString",
-      "id": "pocketbase-admin-password",
-      "description": "PocketBase Admin Password",
-      "password": true
-    }
-  ],
-  "servers": {
-    "pocketbaseDocker": {
-      "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "POCKETBASE_URL=http://host.docker.internal:8090",
-        "-e",
-        "POCKETBASE_ADMIN_EMAIL=${input:pocketbase-admin-email}",
-        "-e",
-        "POCKETBASE_ADMIN_PASSWORD=${input:pocketbase-admin-password}",
-        "pocketbase-mcp"
-      ]
-    }
-  }
-}
-```
-
-### Docker Configuration Notes
-
-- **`-i`**: Interactive mode (required for stdio communication)
-- **`--rm`**: Automatically remove container when it exits
-- **`host.docker.internal`**: Use this to access PocketBase running on your host machine from within Docker
-- **Environment Variables**: Replace placeholder values with your actual PocketBase credentials
-- **Network**: If your PocketBase is also running in Docker, use Docker networking (e.g., `--network host` or custom bridge network)
-
-### Docker Compose (Optional)
-
-Create a `docker-compose.yml` for easier management:
-
-```yaml
-version: "3.8"
-
-services:
-  pocketbase-mcp:
-    build: .
-    environment:
-      - POCKETBASE_URL=http://host.docker.internal:8090
-      - POCKETBASE_ADMIN_EMAIL=your_admin@example.com
-      - POCKETBASE_ADMIN_PASSWORD=your_admin_password
-    stdin_open: true
-    tty: true
-```
-
-Then configure your MCP settings to use:
-
-```json
-{
-  "mcpServers": {
-    "pocketbase-docker": {
-      "command": "docker-compose",
-      "args": ["run", "--rm", "pocketbase-mcp"],
-      "disabled": false
-    }
-  }
-}
-```
+`POCKETBASE_URL` is required and points to the instance base URL (omit `/_/`). Supply both admin email/password or `POCKETBASE_ADMIN_TOKEN`. Superuser login is lazy and concurrent logins share one request. Tokens remain in memory. User authentication has a separate client and never gains superuser privileges from a collection management call. Record, file, batch and custom API tools use the user session by default; select `asAdmin: true` explicitly for superuser access. Collection and administrative tools always require superuser access. Expired configured tokens require replacement or configured email/password; no mutation is automatically retried.
 
 ## Features
 
-### Collection Management
+See [the coverage matrix](docs/coverage.md) for every documented API family and the boundary between remote APIs and PocketBase server extensions. Every advertised tool has an implementation and validated arguments. PocketBase supplies authoritative field validation and access rules. Errors return MCP `isError` results with HTTP status and field details; unknown tools and invalid arguments return protocol errors.
 
-- Create and manage collections with custom schemas
-- Retrieve collection schemas and metadata
+Existing tool names remain, including `create_collection`, `create_record`, `authenticate_user`, `backup_database` and `import_data`. `authenticate_with_otp` now correctly requires `otpId` and `password`; call `request_otp` with an email first. `list_collections` always returns a paginated list. Imports use the transactional batch API and require batch to be enabled in settings. Collection fields are no longer injected: use `get_collection_scaffolds` or explicitly add `autodate` fields if desired.
 
-### Record Operations
+Queries support `options` plus common top-level `filter`, `sort`, `expand`, `fields`, `page`, `perPage`, and `skipTotal` where advertised. Query options cannot override request headers, authentication, fetch, body or method. Collection fields accept all field-specific settings; API rules accept `null` (locked), `""` (public), or a filter. Collection `data` accepts additional version-specific settings; explicit top-level settings take precedence.
 
-- CRUD operations for records
-- Relationship expansion support
-- Pagination and cursor-based navigation
+Record uploads accept `files: [{"field":"attachment", "filename":"note.txt", "base64":"aGVsbG8=", "contentType":"text/plain"}]` alongside `data`. File field modifiers (`attachment+`, `attachment-`) and relation modifiers pass through. Each base64 input is limited to 14 million characters; PocketBase enforces configured file limits. URLs and tokens returned by authentication/protected-file tools are sensitive. Binary downloads use generated URLs, so large files do not inflate MCP responses.
 
-### User Management
+Realtime tools subscribe to collection records or custom topics, then drain events with `read_realtime_events`. Each subscription buffers up to 1000 events and reports drops; at most 100 subscriptions are allowed per server. Events are memory-only. Unsubscribe when finished. Shutdown closes all realtime connections.
 
-- User authentication and token management
-- User account creation and management
-- Password management
+## Tests
 
-### Database Operations
-
-- Database backup
-
-## Available Tools
-
-### Collection Management
-
-- `create_collection`: Create a new collection with custom schema
-- `get_collection`: Get schema details for a collection
-
-### Record Operations
-
-- `create_record`: Create a new record in a collection
-- `list_records`: List records with optional filters and pagination
-- `update_record`: Update an existing record
-- `delete_record`: Delete a record
-
-### User Management
-
-- `authenticate_user`: Authenticate a user and get auth token
-- `create_user`: Create a new user account
-
-### Database Operations
-
-- `backup_database`: Create a backup of the PocketBase database with format options
-
-## Configuration
-
-The server requires the following environment variables:
-
-- `POCKETBASE_URL`: URL of your PocketBase instance (e.g., "http://127.0.0.1:8090")
-
-Optional environment variables:
-
-- `POCKETBASE_ADMIN_EMAIL`: Admin email for certain operations
-- `POCKETBASE_ADMIN_PASSWORD`: Admin password
-- `POCKETBASE_DATA_DIR`: Custom data directory path
-
-## Usage Examples
-
-```typescript
-// Create a new collection
-await mcp.use_tool("pocketbase", "create_collection", {
-  name: "posts",
-  schema: [
-    {
-      name: "title",
-      type: "text",
-      required: true,
-    },
-    {
-      name: "content",
-      type: "text",
-      required: true,
-    },
-  ],
-});
-
-// Authenticate with password
-await mcp.use_tool("pocketbase", "authenticate_user", {
-  email: "user@example.com",
-  password: "securepassword",
-  collection: "users",
-});
+```sh
+npm test                 # unit regression tests and real stdio MCP client
+npm run typecheck
+# Set URL and admin credentials in .env for the disposable instance:
+npm run test:integration  # live PocketBase APIs
 ```
 
-## Contributing
+The integration suite creates unique temporary collections and a backup, restores the previous batch settings, and cleans up its artifacts in `finally`. It checks auth isolation, file bytes, collection/view schemas, imports, batch rollback, realtime delivery, SQL, logs and backup download. It skips when admin credentials are absent. Email delivery, external OAuth providers, S3, Apple signing, backup upload/restore and destructive log/cron administration are not exercised against external services by this suite.
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+## Docker
+
+```sh
+docker build -t pocketbase-mcp .
+docker run --rm -i --env-file .env pocketbase-mcp
+```
+
+The image runs as a non-root user, contains production dependencies, and has no embedded credentials. Use a URL reachable from the container, for example `http://host.docker.internal:8090` (Linux may require `--add-host=host.docker.internal:host-gateway`). Stdio requires `-i`; no HTTP port is exposed.
