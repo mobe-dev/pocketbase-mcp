@@ -1,25 +1,30 @@
 {
   "name": "pocketbase-server",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "bin": {
     "pocketbase-server": "./build/index.js"
   },
   "scripts": {
-    "build": "tsc && pnpm run bundle",
-    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=build/index.js --banner:js=\"#!/usr/bin/env node\" --allow-overwrite",
-    "prestart": "npm run build",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node build/index.js",
-    "dev": "tsc -w"
+    "dev": "tsc --watch",
+    "test": "npm run build && node --test tests/unit.test.mjs tests/protocol.test.mjs",
+    "test:integration": "npm run build && node --test tests/integration.test.mjs"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^0.6.1",
-    "pocketbase": "^0.26.1"
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "ajv": "^8.20.0",
+    "eventsource": "^5.1.2",
+    "pocketbase": "^0.28.1",
+    "dotenv": "^17.2.0"
   },
   "devDependencies": {
-    "@types/node": "^24.0.15",
-    "dotenv": "^17.2.0",
-    "esbuild": "^0.27.2",
-    "typescript": "^5.8.3"
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
