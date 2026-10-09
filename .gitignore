@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 
 # Build output
 build/
@@ -34,3 +33,21 @@ pb_migrations/
 Thumbs.db
 
 .env
+
+# Local development instructions and disposable test instance
+/AGENTS.md
+/pocketbase-test/
+
+# Local secrets (keep the shareable template)
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Generated documentation, test and release output
+/docs/pocketbase/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+/pocketbase-server-*.tgz
+/pocketbase-server-*.zip
