@@ -1,0 +1,60 @@
+import 'dotenv/config';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { createServer } from '../build/server.js';
+import { readConfig } from '../build/config.js';
+const enabled=!!process.env.POCKETBASE_ADMIN_EMAIL&&!!process.env.POCKETBASE_ADMIN_PASSWORD;
+test('live PocketBase: schemas, CRUD, files, auth isolation, views, imports, batch, realtime and admin APIs',{skip:!enabled,timeout:60000},async()=>{
+ const app=createServer(readConfig());const prefix='mcp_'+randomBytes(4).toString('hex');const posts=prefix+'_posts',users=prefix+'_users',view=prefix+'_view';let backup,settings;
+ const call=async(name,args={})=>{const result=await app.registry.call(name,args);assert.ok(!result.isError,`${name}: ${result.content[0].text}`);return JSON.parse(result.content[0].text);};
+ try{
+ assert.equal((await call('health_check')).code,200);
+ const schema=await call('create_collection',{name:posts,type:'base',fields:[{name:'title',type:'text',required:true,max:100},{name:'asset',type:'file',maxSelect:1,maxSize:100000}],listRule:'',viewRule:''});
+ assert.ok(!schema.fields.some(f=>f.name==='created'));
+ assert.equal((await call('get_collection',{collectionIdOrName:posts})).name,posts);
+ assert.equal((await call('list_collections',{filter:`name='${posts}'`})).items.length,1);
+ await call('update_collection',{collectionIdOrName:posts,listRule:null});
+ const rec=await call('create_record',{collection:posts,asAdmin:true,data:{title:'first'},files:[{field:'asset',filename:'test.txt',base64:Buffer.from('test file').toString('base64'),contentType:'text/plain'}]});
+ assert.equal((await call('get_record',{collection:posts,id:rec.id,asAdmin:true})).title,'first');
+ assert.equal((await call('get_first_record',{collection:posts,filter:`id='${rec.id}'`,asAdmin:true})).id,rec.id);
+ const url=await call('get_file_url',{record:rec,filename:rec.asset});assert.equal(await(await fetch(url.url)).text(),'test file');
+ await call('update_record',{collection:posts,id:rec.id,asAdmin:true,data:{title:'updated'}});
+ assert.equal((await call('list_records',{collection:posts,asAdmin:true,filter:"title='updated'",fields:'id,title'})).items[0].title,'updated');
+ const invalid=await app.registry.call('create_record',{collection:posts,asAdmin:true,data:{}});assert.equal(invalid.isError,true);assert.equal(JSON.parse(invalid.content[0].text).status,400);
+ await call('create_collection',{name:users,type:'auth',passwordAuth:{enabled:true,identityFields:['email']},fields:[{name:'name',type:'text'}]});
+ const user=await call('create_user',{collection:users,asAdmin:true,email:`${prefix}@example.com`,password:'integration-password',passwordConfirm:'integration-password',name:'Test'});
+ await call('authenticate_user',{collection:users,email:user.email,password:'integration-password'});
+ assert.equal((await call('auth_status')).record.id,user.id);
+ await call('list_collections');assert.equal((await call('auth_status')).record.id,user.id);
+ await call('auth_refresh',{collection:users});await call('list_auth_methods',{collection:users});
+ await call('impersonate_user',{collectionIdOrName:users,id:user.id,duration:60});assert.equal((await call('auth_status')).record.id,user.id);
+ await call('logout');assert.equal((await call('auth_status')).isValid,false);
+ await call('dry_run_view_query',{query:`SELECT id,title FROM ${posts}`});
+ await call('create_collection',{name:view,type:'view',viewQuery:`SELECT id,title FROM ${posts}`});
+ assert.equal((await call('list_records',{collection:view,asAdmin:true})).items.length,1);
+ await call('get_collection_scaffolds');await call('list_oauth2_providers');await call('list_crons');await call('run_sql',{query:`SELECT count(*) AS total FROM ${posts}`});
+ settings=await call('get_settings');await call('update_settings',{data:{batch:{...settings.batch,enabled:true}}});
+ await call('batch_records',{asAdmin:true,requests:[{collection:posts,operation:'create',data:{title:'batch'}}]});
+ await call('import_data',{collection:posts,asAdmin:true,data:[{title:'import'}]});
+ await call('import_data',{collection:posts,asAdmin:true,mode:'update',data:[{id:rec.id,title:'import updated'}]});
+ await call('import_data',{collection:posts,asAdmin:true,mode:'upsert',data:[{id:rec.id,title:'upserted'}]});
+ const before=(await call('list_records',{collection:posts,asAdmin:true})).totalItems;
+ const failed=await app.registry.call('batch_records',{asAdmin:true,requests:[{collection:posts,operation:'create',data:{title:'rollback'}},{collection:posts,operation:'create',data:{}}]});assert.equal(failed.isError,true);assert.equal((await call('list_records',{collection:posts,asAdmin:true})).totalItems,before);
+ const sub=await call('subscribe_realtime',{collection:posts,topic:'*',asAdmin:true});
+ await call('create_record',{collection:posts,asAdmin:true,data:{title:'realtime'}});
+ let events=[];for(let i=0;i<30&&!events.length;i++){await new Promise(r=>setTimeout(r,100));events=(await call('read_realtime_events',sub)).events;}
+ assert.ok(events.some(e=>e.action==='create'&&e.record.title==='realtime'));await call('unsubscribe_realtime',sub);
+ await call('list_logs');await call('get_log_stats');
+ backup=prefix+'.zip';await call('backup_database',{name:backup});assert.ok((await call('list_backups')).some(b=>b.key===backup));
+ const download=await call('get_backup_download_url',{key:backup});assert.equal((await fetch(download.url)).status,200);
+ await call('delete_backup',{key:backup});backup=undefined;
+ await call('delete_record',{collection:posts,id:rec.id,asAdmin:true});
+ await call('delete_collection',{collectionIdOrName:view});await call('truncate_collection',{collectionIdOrName:posts});assert.equal((await call('list_records',{collection:posts,asAdmin:true})).totalItems,0);
+ }finally{
+  if(backup)await app.registry.call('delete_backup',{key:backup});
+  if(settings)await app.registry.call('update_settings',{data:{batch:settings.batch}});
+  for(const name of [view,users,posts])await app.registry.call('delete_collection',{collectionIdOrName:name});
+  await app.close();
+ }
+});
